@@ -1,38 +1,67 @@
 diff --git a/grbl laser copy.cps b/grbl laser.cps
-index 91d493a..989659d 100644
+similarity index 79%
+rename from grbl laser copy.cps
+rename to grbl laser.cps
+index 4950713..0c2220b 100644
 --- a/grbl laser copy.cps	
 +++ b/grbl laser.cps	
-@@ -40,9 +40,12 @@ properties = {
-   sequenceNumberStart: 10, // first sequence number
-   sequenceNumberIncrement: 1, // increment for sequence numbers
-   separateWordsWithSpace: true, // specifies that the words should be separated with a white space
--  throughPower: 255, // set the Laser Power for though cutting
--  etchPower: 50, // set the power for etching
--  vaporizePower: 255 // set the power for vaporize
-+  maxPowerLevel: 1000, // maximum power level to scale power vars against
-+  throughPower: 1, // set the Laser Power for though cutting
-+  etchPower: 0.25, // set the power for etching
-+  vaporizePower: 1, // set the power for vaporize
-+  throughPassCount: 1,
-+  writeThroughPassCountComment: true
+@@ -75,12 +75,20 @@ properties = {
+     value      : true,
+     scope      : "post"
+   },
++  maxPowerLevel: {
++    title      : "Max power level",
++    description: "Max laser power used to scale power levels (corresponds to spindle RPM/$30).",
++    group      : "preferences",
++    type       : "integer",
++    value      : 1000,
++    scope      : "post"
++  },
+   throughPower: {
+     title      : "Through power",
+     description: "Sets the laser power used for through cutting.",
+     group      : "preferences",
+     type       : "number",
+-    value      : 255,
++    value      : 1,
+     scope      : "post"
+   },
+   etchPower: {
+@@ -88,7 +96,7 @@ properties = {
+     description: "Sets the laser power used for etching.",
+     group      : "preferences",
+     type       : "number",
+-    value      : 50,
++    value      : 0.25,
+     scope      : "post"
+   },
+   vaporizePower: {
+@@ -96,7 +104,23 @@ properties = {
+     description: "Sets the laser power used for vaporize cutting.",
+     group      : "preferences",
+     type       : "number",
+-    value      : 255,
++    value      : 1,
++    scope      : "post"
++  },
++  throughPassCount: {
++    title      : "Through pass count",
++    description: "Pass count for through cutting operations.",
++    group      : "preferences",
++    type       : "integer",
++    value      : 1,
++    scope      : "post"
++  },
++  writeThroughPassCountComment: {
++    title      : "Write through pass count comment",
++    description: "Sets whether to write comments for through pass section duplications.",
++    group      : "preferences",
++    type       : "boolean",
++    value      : 1,
+     scope      : "post"
+   }
  };
- 
- // user-defined property definitions
-@@ -52,9 +55,12 @@ propertyDefinitions = {
-   sequenceNumberStart: {title:"Start sequence number", description:"The number at which to start the sequence numbers.", group:1, type:"integer"},
-   sequenceNumberIncrement: {title:"Sequence number increment", description:"The amount by which the sequence number is incremented by in each block.", group:1, type:"integer"},
-   separateWordsWithSpace: {title:"Separate words with space", description:"Adds spaces between words if 'yes' is selected.", type:"boolean"},
-+  maxPowerLevel: {title: "Max power level", description: "Max laser power used to scale power levels (corresponds to spindle RPM/$30).", type: "integer"},
-   throughPower: {title: "Through power", description: "Sets the laser power used for through cutting.", type: "number"},
-   etchPower: {title:"Etch power", description:"Sets the laser power used for etching.", type:"number"},
--  vaporizePower: {title:"Vaporize power", description:"Sets the laser power used for vaporize cutting.", type:"number"}
-+  vaporizePower: {title:"Vaporize power", description:"Sets the laser power used for vaporize cutting.", type:"number"},
-+  throughPassCount: {title: "Through pass count", description: "Pass count for through cutting operations.", type: "integer"},
-+  writeThroughPassCountComment: {title: "Write through pass count comment", description:"Sets whether to write comments for through pass section duplications.", type: "boolean"}
- };
- 
- var gFormat = createFormat({prefix:"G", decimals:0});
-@@ -88,10 +94,17 @@ var WARNING_WORK_OFFSET = 0;
+@@ -140,10 +164,17 @@ var WARNING_WORK_OFFSET = 0;
  var sequenceNumber;
  var currentWorkOffset;
  
@@ -47,18 +76,18 @@ index 91d493a..989659d 100644
 +    currentSectionBuffer.push(arguments);
 +  }
 +
-   if (properties.showSequenceNumbers) {
+   if (getProperty("showSequenceNumbers")) {
      writeWords2("N" + sequenceNumber, arguments);
-     sequenceNumber += properties.sequenceNumberIncrement;
-@@ -206,6 +219,7 @@ function forceAny() {
+     sequenceNumber += getProperty("sequenceNumberIncrement");
+@@ -258,6 +289,7 @@ function forceAny() {
  }
  
  function onSection() {
 +  isWritingSection = true;
  
    writeln("");
-   
-@@ -224,22 +238,6 @@ function onSection() {
+ 
+@@ -276,22 +308,6 @@ function onSection() {
        error(localize("The CNC does not support the required tool/process. Only laser cutting is supported."));
        return;
      }
@@ -66,13 +95,13 @@ index 91d493a..989659d 100644
 -    var power = 0;
 -    switch (currentSection.jetMode) {
 -    case JET_MODE_THROUGH:
--      power = properties.throughPower;
+-      power = getProperty("throughPower");
 -      break;
 -    case JET_MODE_ETCHING:
--      power = properties.etchPower;
+-      power = getProperty("etchPower");
 -      break;
 -    case JET_MODE_VAPORIZE:
--      power = properties.vaporizePower;
+-      power = getProperty("vaporizePower");
 -      break;
 -    default:
 -      error(localize("Unsupported cutting mode."));
@@ -81,18 +110,18 @@ index 91d493a..989659d 100644
    } else {
      error(localize("The CNC does not support the required tool/process. Only laser cutting is supported."));
      return;
-@@ -272,7 +270,9 @@ function onSection() {
+@@ -312,7 +328,9 @@ function onSection() {
      setRotation(remaining);
    }
-   
+ 
 -  writeBlock(gMotionModal.format(0), sOutput.format(power), mFormat.format(getPowerMode(currentSection)));
 +  // Only write G0 instruction, let #onPower call #writeBlock for spindle ON/OFF commands
-+  // writeBlock(gMotionModal.format(0), sOutput.format(power), mFormat.format(getPowerMode(currentSection)));
++  //writeBlock(gMotionModal.format(0), sOutput.format(power), mFormat.format(getPowerMode(currentSection)));
 +  writeBlock(gMotionModal.format(0));
  
    var initialPosition = getFramePosition(currentSection.getInitialPosition());
    writeBlock(gMotionModal.format(0), xOutput.format(initialPosition.x), yOutput.format(initialPosition.y));
-@@ -292,7 +292,44 @@ function onRadiusCompensation() {
+@@ -332,7 +350,44 @@ function onRadiusCompensation() {
    pendingRadiusCompensation = radiusCompensation;
  }
  
@@ -111,13 +140,13 @@ index 91d493a..989659d 100644
 +
 +    switch (currentSection.jetMode) {
 +    case JET_MODE_THROUGH:
-+      powerLevel = properties.throughPower;
++      powerLevel = getProperty("throughPower");
 +      break;
 +    case JET_MODE_ETCHING:
-+      powerLevel = properties.etchPower;
++      powerLevel = getProperty("etchPower");
 +      break;
 +    case JET_MODE_VAPORIZE:
-+      powerLevel = properties.vaporizePower;
++      powerLevel = getProperty("vaporizePower");
 +      break;
 +    default:
 +      error(localize("Unsupported cutting mode."));
@@ -126,7 +155,7 @@ index 91d493a..989659d 100644
 +
 +    // Scale powerLevel against maxPowerLevel
 +    // Round to avoid decimals and clamp to prevent over/under values
-+    powerLevel = clamp(0, Math.round(powerLevel * properties.maxPowerLevel), properties.maxPowerLevel);
++    powerLevel = clamp(0, Math.round(powerLevel * getProperty("maxPowerLevel")), getProperty("maxPowerLevel"));
 +
 +    var powerMode = getPowerMode(currentSection);
 +
@@ -137,7 +166,7 @@ index 91d493a..989659d 100644
  }
  
  function onRapid(_x, _y, _z) {
-@@ -430,6 +467,27 @@ function onCommand(command) {
+@@ -470,6 +525,27 @@ function onCommand(command) {
  
  function onSectionEnd() {
    forceAny();
@@ -147,10 +176,10 @@ index 91d493a..989659d 100644
 +
 +    // Repush the currentSectionBuffer into #writeBlock
 +    if (currentSectionBuffer.length > 0) {
-+      for (var pass = 0; pass < properties.throughPassCount - 1; pass++) {
++      for (var pass = 0; pass < getProperty("throughPassCount") - 1; pass++) {
 +        writeln("");
 +
-+        if (properties.writeThroughPassCountComment) {
++        if (getProperty("writeThroughPassCountComment")) {
 +          writeComment("throughPass Copy " + (pass + 1));
 +        }
 +
